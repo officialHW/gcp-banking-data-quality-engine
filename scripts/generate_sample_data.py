@@ -38,12 +38,16 @@ def generate_transactions(n=1000, include_bad_data=True):
             ).isoformat(),
             "channel": random.choice(CHANNELS),
             "status": random.choices(
-                STATUSES, weights = [70,15,10,5]
+                STATUSES, weights=[70, 15, 10, 5]
             )[0],
             "country_code": random.choice(["GB", "IE", "DE", "FR", "US"]),
             "ip_address": f"{random.randint(1, 255)}.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(0, 255)}",
-            "device_type": random.choice(["iOS", "Android", "Web", "ATM"]),
+            "device_type": random.choice(["iOS", "Android", "Web"]),
         }
+
+        # Make ATM channel always use ATM device
+        if row["channel"] == "ATM":
+            row["device_type"] = "ATM"
 
         # Intentionally inject data quality issues (~10% of records)
         if include_bad_data and random.random() < 0.10:
@@ -65,10 +69,11 @@ def generate_transactions(n=1000, include_bad_data=True):
                 row["currency"] = "XXX"
             elif issue == "duplicate_id":
                 row["transaction_id"] = rows[-1]["transaction_id"] if rows else row["transaction_id"]
-        
+
         rows.append(row)
 
     return rows
+
 
 def load_to_bigquery(rows):
     """Load generated rows into BigQuery via DataFrame."""
@@ -83,18 +88,18 @@ def load_to_bigquery(rows):
     table_id = "banking-dq-engine-490011.banking_dq.raw_transactions"
 
     job_config = bigquery.LoadJobConfig(
-        write_disposition="WRITE_TRUNCATE",  # Overwrite existing data
+        write_disposition="WRITE_TRUNCATE",
     )
 
     job = client.load_table_from_dataframe(df, table_id, job_config=job_config)
-    job.result()  # Wait for the job to complete
+    job.result()
 
     print(f"Loaded {len(df)} rows to {table_id}")
+
 
 if __name__ == "__main__":
     data = generate_transactions(n=5000, include_bad_data=True)
     load_to_bigquery(data)
-    # Also save locally for unit testing
     with open("tests/fixtures/sample_transactions.json", "w") as f:
         json.dump(data[:100], f, indent=2)
     print("Sample fixture saved to tests/fixtures/")
